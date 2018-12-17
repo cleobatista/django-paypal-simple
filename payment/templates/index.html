@@ -1,0 +1,434 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load payment_extras %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<!-- Custom styles for this template -->
+
+<div class="container">
+  <div class="py-5 text-center">
+    <h2>Resumo do Pedido | {{ product.name }}</h2>
+  </div>
+
+  <div class="row">
+    <div class="col-md-12">
+      <h4 class="d-flex justify-content-between align-items-center mb-3">
+        <span class="text-muted">Seu carrinho</span>
+        <span class="badge badge-secondary badge-pill">1</span>
+      </h4>
+      {% if errors %}
+      <div class="alert alert-danger"><span>{{ errors }}</span></div>
+      {% endif %}
+      <ul class="list-group mb-3">
+        <li class="list-group-item d-flex justify-content-between lh-condensed">
+          <div>
+            <h6 class="my-0">My product</h6>
+            <small class="text-muted">{{ product.name }}</small>
+          </div>
+          <span class="text-muted">R$ {{ product.price }}</span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between bg-light">
+          <div class="text-success">
+            <h6 class="my-0">Cupom</h6>
+            <small>Promoção</small>
+          </div>
+          <span id="productDiscount" class="text-success">-R$ {{ product.discount }}</span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Total (R$)</span>
+          <strong id="productTotal">R$ {{ product.price|subtract:product.discount}}</strong>
+        </li>
+      </ul>
+
+      <form id="coupon_apply" class="card p-2">
+        <div class="input-group">
+          <input type="hidden" name="product" class="form-control" value="{{ product.path_name }}">
+          <input type="text" name="coupon" class="form-control" placeholder="CUPOM" value="{{ coupon.code }}">
+          <div class="input-group-append">
+            <button type="submit" class="btn btn-primary">Aplicar</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-12">
+      <form action="" id="formUser" class="uniForm" method="post">
+        {% csrf_token %}
+        {{ form|crispy }}
+        <div class="col-md-12 discount-with d-none">
+          <button type="submit" class="btn btn-lg btn-primary btn-block">Comprar</button>
+        </div>
+      </form>
+    </div>
+
+
+
+    <div class="col-md-12 discount-without">
+      <h3>Escolha sua forma de Pagamento</h3>
+      <ul class="nav nav-tabs">
+        <li>
+          <a href="#1tab" data-toggle="tab"class="btn btn-primary btn-lg">
+            <span class="fab fa-paypal"> Paypal</span>
+          </a>
+        </li>
+        <li>
+          <a href="#2tab" data-toggle="tab" id="miniBrowserInitiateCheckout" onclick="initiateCheckout();return false;" class="btn btn-primary btn-lg">
+            <span class="fas fa-credit-card"> Cartão de Crédito</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <div class="tab-pane active" id="1tab">
+          <div>
+            <img class="img-responsive" src="{% static "images/saiba-mais.png" %}">
+          </div>
+          <div id="paypal-button"></div>
+        </div>
+
+        <div class="tab-pane" id="2tab">
+          <div id="ppplusDiv"></div>
+          <button type="submit" class="btn btn-lg btn-primary btn-block" id="continueButton" onclick="ppp.doContinue(); return false;" disabled>Comprar</button>
+        </div>
+      </div>
+
+
+    </div>
+  </div>
+
+</div>
+{% endblock content %}
+
+{% block javascript %}
+{{ block.super }}
+<script src="https://www.paypalobjects.com/api/checkout.js"></script>
+<script src="https://www.paypalobjects.com/webstatic/ppplusdcc/ppplusdcc.min.js" type="text/javascript"></script>
+<script type="text/javascript">
+  window.onload = function() {
+    if ($('#productTotal').text().startsWith("R$ 0,")){
+      $('.discount-with').removeClass('d-none')
+      $('.discount-without').addClass('d-none')
+    } else {
+      $('.discount-with').addClass('d-none')
+      $('.discount-without').removeClass('d-none')
+    };
+  };
+  $.fn.serializeObject = function() {
+    var o = {};
+    var a = this.serializeArray();
+    $.each(a, function() {
+      if (o[this.name]) {
+        if (!o[this.name].push) {
+          o[this.name] = [o[this.name]];
+        }
+        o[this.name].push(this.value || '');
+      } else {
+        o[this.name] = this.value || '';
+      }
+    });
+    return o;
+  };
+
+  var CREATE_PAYMENT_URL = '{% url "payment:create" %}';
+  var EXECUTE_PAYMENT_URL = '{% url "payment:execute" %}';
+  paypal.Button.render({
+    env: '{{ PAYPAL_ENVIRONMENT }}',
+    locale: 'pt_BR',
+
+    payment: function(data, actions) {
+      return paypal.request.post(CREATE_PAYMENT_URL, {
+        product: "{{ product.path_name }}",
+        csrfmiddlewaretoken: "{{ csrf_token }}",
+        origin: "ec",
+        coupon: $('#coupon_apply').serializeObject().coupon
+      })
+      .then(function(data) {
+        return data.id;
+      },
+      function(error){
+        alert("erro de processamento do Paypal: " + error)
+      });
+    },
+
+    commit: true,
+
+    onAuthorize: function(data, actions) {
+      return paypal.request.post(EXECUTE_PAYMENT_URL, {
+        paymentID: data.paymentID,
+        payer_id:   data.payerID,
+        csrfmiddlewaretoken: "{{ csrf_token }}"
+      })
+      .then(function(data) {
+        window.location = EXECUTE_PAYMENT_URL;
+      },
+      function(error){
+        alert("erro de processamento do Paypal: " + error)
+      });
+    },
+
+    style: {
+      label: 'pay',
+            fundingicons: false, // optional
+            branding: true, // optional
+            size:  'responsive', // small | medium | large | responsive
+            shape: 'rect',   // pill | rect
+            color: 'blue'   // gold | blue | silve | black
+          },
+        },
+        '#paypal-button');
+
+
+
+  function initiateCheckout() {
+    $("#ppplusDiv").html('<img src="{% static "images/loading.gif" %}">');
+    $("#continueButton").hide();
+    var u_dt = $('#formUser').serializeObject()
+    var p_dt = {
+      product: "{{ product.path_name }}",
+      csrfmiddlewaretoken: "{{ csrf_token }}",
+      origin: "pp",
+      coupon: $('#coupon_apply').serializeObject().coupon
+    };
+    console.log(p_dt)
+    $.ajax({
+      url: CREATE_PAYMENT_URL,
+      type: 'post',
+      data: Object.assign(u_dt,p_dt),
+      success: function(data){
+        ppp = PAYPAL.apps.PPP({
+          "approvalUrl": data.approvalUrl,
+          "placeholder": "ppplusDiv",
+          "mode": "{{ PAYPAL_ENVIRONMENT }}",
+          "payerFirstName": u_dt['first_name'],
+          "payerLastName": u_dt['last_name'],
+          "payerEmail": u_dt['email'],
+          "payerPhone": u_dt['phone'],
+          "payerTaxId": u_dt['id_cpf'],
+          "payerTaxIdType": "BR_CPF",
+          "language":"pt_BR",
+          "country": "BR",
+          "enableContinue": "continueButton",
+          "disableContinue": "continueButton",
+        });
+        $("#continueButton").show();
+        $("#formUser :input").change(function(){
+          initiateCheckout();
+        });
+        return ppp;
+      },
+      error: function(error){
+        $('#ppplusDiv').html("")
+        $.each(error.responseJSON,function(key,value){
+          var $div = $("<div>", {class:"alert alert-danger"})
+          $div.html(key + ": " + value)
+          $('#ppplusDiv').append($div)
+        });
+      }
+    });
+  };
+
+  function executeCheckout(payerID){
+    $.ajax({
+      url: EXECUTE_PAYMENT_URL,
+      type: 'post',
+      data: {
+        payer_id: payerID,
+        csrfmiddlewaretoken: "{{ csrf_token }}",
+      },
+      success: function( data){
+        window.location = EXECUTE_PAYMENT_URL;
+      },
+      error: function(error){
+        alert("erro: " + error)
+      }
+    });
+  }
+</script>
+<script type="text/javascript">
+  if (window.addEventListener) {
+
+    window.addEventListener("message", receiveMessage, false);
+
+    console.log("addEventListener successful", "debug");
+
+  } else if (window.attachEvent) {
+
+    window.attachEvent("onmessage", receiveMessage);
+
+    console.log("attachEvent successful", "debug");
+
+  } else {
+
+    console.log("Could not attach message listener", "debug");
+
+    throw new Error("Can't attach message listener");
+
+  }
+
+  function receiveMessage(event) {
+
+    try {
+      message = JSON.parse(event.data);
+
+        if (typeof message['cause'] !== 'undefined') { //iFrame error handling
+
+            ppplusError = message['cause'].replace (/['"]+/g,""); //log & attach this error into the order if possible
+
+      // <<Insert Code Here>>
+
+      switch (ppplusError)
+
+      {
+
+                    case "INTERNAL_SERVICE_ERROR": //javascript fallthrough
+                    case "SOCKET_HANG_UP": //javascript fallthrough
+                    case "socket hang up": //javascript fallthrough
+                    case "connect ECONNREFUSED": //javascript fallthrough
+                    case "connect ETIMEDOUT": //javascript fallthrough
+                    case "UNKNOWN_INTERNAL_ERROR": //javascript fallthrough
+                    case "fiWalletLifecycle_unknown_error": //javascript fallthrough
+                    case "Failed to decrypt term info": //javascript fallthrough
+                    case "RESOURCE_NOT_FOUND": //javascript fallthrough
+                    case "INTERNAL_SERVER_ERROR":
+                    console.log("Ocorreu um erro inesperado, por favor tente novamente. (" + ppplusError + ")"); //pt_BR
+                    alert ("Ocorreu um erro inesperado, por favor tente novamente. (" + ppplusError + ")"); //pt_BR
+                    //Generic error, inform the customer to try again; generate a new approval_url and reload the iFrame.
+                    // <<Insert Code Here>>
+                    break;
+
+                    case "RISK_N_DECLINE": //javascript fallthrough
+                    case "NO_VALID_FUNDING_SOURCE_OR_RISK_REFUSED": //javascript fallthrough
+                    case "TRY_ANOTHER_CARD": //javascript fallthrough
+                    case "NO_VALID_FUNDING_INSTRUMENT":
+                    alert ("Seu pagamento não foi aprovado. Por favor utilize outro cartão, caso o problema persista entre em contato com o PayPal (0800-047-4482). (" + ppplusError + ")"); //pt_BR
+                    console.log("Seu pagamento não foi aprovado. Por favor utilize outro cartão, caso o problema persista entre em contato com o PayPal (0800-047-4482). (" + ppplusError + ")"); //pt_BR
+                    //Risk denial, inform the customer to try again; generate a new approval_url and reload the iFrame.
+                    // <<Insert Code Here>>
+                    break;
+
+                    case "CARD_ATTEMPT_INVALID":
+                    console.log("Ocorreu um erro inesperado, por favor tente novamente. (" + ppplusError + ")"); //pt_BR
+                    alert ("Ocorreu um erro inesperado, por favor tente novamente. (" + ppplusError + ")"); //pt_BR
+                    //03 maximum payment attempts with error, inform the customer to try again; generate a new approval_url and reload the iFrame.
+                    // <<Insert Code Here>>
+                    break;
+
+                    case "INVALID_OR_EXPIRED_TOKEN":
+                    console.log("A sua sessão expirou, por favor tente novamente. (" + ppplusError + ")"); //pt_BR
+                    alert ("A sua sessão expirou, por favor tente novamente. (" + ppplusError + ")"); //pt_BR
+                    //User session is expired, inform the customer to try again; generate a new approval_url and reload the iFrame.
+                    // <<Insert Code Here>>
+                    break;
+
+                    case "CHECK_ENTRY":
+                    console.log("Por favor revise os dados de Cartão de Crédito inseridos. (" + ppplusError + ")"); //pt_BR
+                    alert ("Por favor revise os dados de Cartão de Crédito inseridos. (" + ppplusError + ")"); //pt_BR
+                    //Missing or invalid credit card information, inform your customer to check the inputs.
+                    // <<Insert Code Here>>
+                    break;
+
+                    default:  //unknown error & reload payment flow
+                    console.log("Ocorreu um erro inesperado, por favor tente novamente. (" + ppplusError + ")"); //pt_BR
+                    alert ("Ocorreu um erro inesperado, por favor tente novamente. (" + ppplusError + ")"); //pt_BR
+                    //Generic error, inform the customer to try again; generate a new approval_url and reload the iFrame.
+                    // <<Insert Code Here>>
+
+                  }
+
+                }
+
+        if (message['action'] == 'checkout') { //PPPlus session approved, do logic here
+          checkout = message
+          var rememberedCard = null;
+          var payerID = null;
+          var installmentsValue= null;
+
+            rememberedCard = message['result']['rememberedCards']; //save on user BD record
+            payerID = message['result']['payer']['payer_info']['payer_id']; //use it on executePayment API
+
+            executeCheckout(payerID)
+            if(message['result']['term']['term']){
+                installmentsValue = message['result']['term']['term']; //installments value
+              } else {
+                installmentsValue=1; //no installments
+              };
+            /* Next steps:
+
+
+                1) Save the rememberedCard value on the user record on your Database.
+                2) Save the installmentsValue value into the order (Optional).
+                3) Call executePayment API using payerID value to capture the payment.
+
+                */
+
+            // <<Insert Code Here>>
+
+          }
+
+    } catch (e){ //treat exceptions here
+      // <<Insert Code Here>>
+
+    }
+
+  }
+
+  $("#coupon_apply").on("submit", function (event){
+    event.preventDefault();
+    var $cp_data = $(this).serializeObject()
+    $.ajax({
+      url: '{% url "payment:coupon" %}',
+      type: 'post',
+      data: $cp_data,
+      success: function(data){
+        let discount = data.discount;
+        let total_price = data.price - discount;
+        $('#productDiscount').html(discount);
+        $('#productTotal').html(total_price);
+
+        if (total_price == 0){
+          $('.discount-with').removeClass('d-none')
+          $('.discount-without').addClass('d-none')
+        } else {
+          $('.discount-with').addClass('d-none')
+          $('.discount-without').removeClass('d-none')
+        }
+      },
+      error: function(error){
+        alert(error)
+      }
+    });
+  })
+
+  // FIXME: smell code for send data complete view
+
+  $('#formUser').submit((e) => {
+    e.preventDefault();
+    var u_dt = $('#formUser').serializeObject()
+    let data = {
+      product: "{{ product.path_name }}",
+      csrfmiddlewaretoken: "{{ csrf_token }}",
+      origin: "without-paypal",
+      coupon: $('#coupon_apply').serializeObject().coupon
+    }
+    data = Object.assign(data,u_dt)
+    $.ajax({
+      url: CREATE_PAYMENT_URL,
+      type: 'post',
+      data: data,
+      success: function(data){
+        if (data.success == "true"){
+          window.location = EXECUTE_PAYMENT_URL;
+        }
+      },
+      error: function(data) {
+        console.log('Data error =>', data)
+      }
+    })
+    console.log('Submit without paypal');
+  });
+
+</script>
+{% endblock javascript %}

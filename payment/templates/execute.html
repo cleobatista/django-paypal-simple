@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<!-- Custom styles for this template -->
+
+<div class="container">
+  <div class="py-5 text-center">
+    <h2>Compra realizada com sucesso</h2>
+  </div>
+
+  <div class="row">
+    <div class="col-md-12">
+      <h4 class="d-flex justify-content-between align-items-center mb-3">
+        <span class="text-muted">Pedido efetuado com sucesso</span>
+        <span class="badge badge-secondary badge-pill"></span>
+      </h4>
+      <span>Enviamos um email para {{ purchase.email }} com o código do pedido</span>
+    </div>
+  </div>
+
+  <footer class="my-5 pt-5 text-muted text-center text-small">
+    <p class="mb-1">&copy; 2018 My_branch</p>
+    <ul class="list-inline">
+      <li class="list-inline-item"><a href="#">Privacidade</a></li>
+      <li class="list-inline-item"><a href="#">Termos</a></li>
+      <li class="list-inline-item"><a href="#">Suporte</a></li>
+    </ul>
+  </footer>
+</div>
+{% endblock content %}
